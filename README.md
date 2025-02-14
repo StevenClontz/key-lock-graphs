@@ -4,3 +4,4 @@
 2. [Tunnel Graphs](notebooks/tunnel.ipynb)
 3. [Greedy Walks](notebooks/greedy.ipynb)
 4. [Gluing](notebooks/gluing.ipynb)
+4. [Adding Edges](notebooks/addedge.ipynb)
