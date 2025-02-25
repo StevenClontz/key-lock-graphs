@@ -1,3 +1,5 @@
+![the legend of math logo](assets/legendofmath.svg)
+
 # Key-Lock Graphs
 
 1. [Basics](notebooks/basics.ipynb)
