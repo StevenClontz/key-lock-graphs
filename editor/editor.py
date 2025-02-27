@@ -1,14 +1,167 @@
-
+#
+# 
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
  
 import pygame
 import math 
+
+from tkinter import filedialog
+import os
+
+def open_file_explorer(initial_dir=None):
+    file_path = filedialog.askopenfilename(initialdir=initial_dir, title="Select Key-Lock Graph", filetypes=(("Key Lock Graph", "*.klg"),))
+    
+    if file_path:
+        return file_path
+    else:
+        return None
+
+
+def save_file_explorer(initial_dir=None):
+    file_path = filedialog.asksaveasfilename(initialdir=initial_dir, title="Select Key-Lock Graph", filetypes=(("Key Lock Graph", "*.klg"),))
+    
+    if file_path:
+        if not file_path.endswith(".klg"):
+            file_path += '.klg'
+        return file_path
+    else:
+        return None
+
+
+def export(file_name):
+    global nodes
+    global edges 
+
+    
+    global NODE_TYPE_KEY 
+    global NODE_TYPE_START
+    global NODE_TYPE_EMPTY
+
+    def_line = ""
+    for (_,_,node_type) in nodes:
+        if node_type == NODE_TYPE_KEY:
+            def_line += "K"
+        elif node_type == NODE_TYPE_START:
+            def_line += "S"
+        elif node_type == NODE_TYPE_EMPTY:
+            def_line += "E"
+    
+    edge_line = ""
+    for (a, b, locked) in edges:        
+        edge_line += str(a)
+        edge_line += ","
+        edge_line += str(b)
+        if locked:
+            edge_line += "L"
+        else:
+            edge_line += "U"
+    
+    file_contents = def_line + '\n' + edge_line + '\n'
+
+    for (x, y, _) in nodes:
+        file_contents += str(x) + ',' + str(y) + '\n'
+    
+    f = open(file_name, "w")
+    f.write(file_contents)
+    f.close()
+
+
+def imp(file_name):
+    global nodes 
+    global edges 
+    
+    global NODE_TYPE_KEY 
+    global NODE_TYPE_START
+    global NODE_TYPE_EMPTY
+
+
+    nodes = []
+
+    try:
+        with open(file_name, 'r') as file:
+            lines = file.readlines()
+            if len(lines) < 2:
+                print("Invalid graph file?")
+            
+
+            first = lines.pop(0)
+            for chr in first:
+                if chr == '\n' or chr == '\r':
+                    break
+
+                if chr == 'S':
+                    nodes.append((0, 0, NODE_TYPE_START))
+                elif chr == 'K':
+                    nodes.append((0, 0, NODE_TYPE_KEY)) 
+                elif chr == 'E': 
+                    nodes.append((0, 0, NODE_TYPE_EMPTY))
+            
+            second = lines.pop(0)
+            
+            n1 = ''
+            n2 = ''
+            seenComma = False 
+            for chr in second:
+                if chr == '\n' or chr == '\r':
+                    break
+
+                if chr.isdigit():
+                    if not seenComma:
+                        n1 += chr  
+                    else: 
+                        n2 += chr 
+
+                elif chr == ',':
+                    seenComma = True 
+                elif chr == 'L' or chr == 'U':
+                    seenComma = False 
+                    if int(n1) >= len(nodes) or int(n2) >= len(nodes):
+                        print("Edge index out of range", int(n1), int(n2))
+                        exit()
+                    edges.append((int(n1), int(n2), chr == 'L')) 
+                    n1 = ''
+                    n2 = ''
+                else: 
+                    print("Unexpected character:", chr)
+                    exit()  
+        
+        if len(lines) != len(nodes):
+            print("Nope", len(nodes), len(lines))
+            return 
+
+        index = 0 
+        while len(lines) > 0: 
+            top = lines.pop(0)
+            nums = top.split(',')
+            x = float(nums[0])
+            y = float(nums[1])
+            
+            (_, _, tp) = nodes[index]
+            nodes[index] = (x, y, tp)
+            index += 1 
+        
+
+    except Exception as e:
+        print("Uh oh.. there was an error:", e)
+
+
+
 
 # Initialize Pygame
 pygame.init()
 gameClock = pygame.time.Clock()
 
 # Set window dimensions
-width, height = 1000, 800
+width, height = 1000, 1000
 screen = pygame.display.set_mode((width, height))
 # Colors
 white = (255, 255, 255)
@@ -17,7 +170,7 @@ black = (0, 0, 0)
 green = (20, 255, 20)
 
 radius = 35
-line_width = 2
+line_width = 1.5
 
 
 Screen_Offset_x = 0 
@@ -72,9 +225,31 @@ def draw_line(screen, sx, sy, ex, ey, locked, has_end_node):
         cx = (tex + tsx) * 0.5    
         cy = (tey + tsy) * 0.5
 
-        pygame.draw.aaline(screen, black, (cx + perp_x + Screen_Offset_x, cy + perp_y + Screen_Offset_y), (cx - perp_x + Screen_Offset_x, cy - perp_y + Screen_Offset_y))
+        x1, y1 = (cx + perp_x + Screen_Offset_x, cy + perp_y + Screen_Offset_y)
+        x2, y2 = (cx - perp_x + Screen_Offset_x, cy - perp_y + Screen_Offset_y)
+        coords = [
+            (x1 - lwy, y1 + lwx), 
+            (x2 - lwy, y2 + lwx), 
+            (x2 + lwy, y2 - lwx), 
+            (x1 + lwy, y1 - lwx), 
+        ]
+        pygame.draw.polygon(screen, black, coords)
+        
+        for i in range(4):     
+            pygame.draw.aaline(screen, black, coords[i],  coords[(i + 1) % 4])
     
-    pygame.draw.aaline(screen, black, (tsx + Screen_Offset_x, tsy + Screen_Offset_y), (tex + Screen_Offset_x, tey + Screen_Offset_y))
+    x1, y1 = (tsx + Screen_Offset_x, tsy + Screen_Offset_y)
+    x2, y2 = (tex + Screen_Offset_x, tey + Screen_Offset_y)
+    coords = [
+        (x1 + lwx, y1 + lwy), 
+        (x2 + lwx, y2 + lwy), 
+        (x2 - lwx, y2 - lwy), 
+        (x1 - lwx, y1 - lwy), 
+    ]
+    pygame.draw.polygon(screen, black, coords)
+    for i in range(4):     
+        pygame.draw.aaline(screen, black, coords[i],  coords[(i + 1) % 4])
+    
 
 def add_edge(id1, id2, locked):
     global edges 
@@ -176,7 +351,7 @@ while running:
     closest_node_id = -1  
     closest_node_x = 0 
     closest_node_y = 0 
-    closest_d = 10000
+    closest_d = ((radius*1.3)**2)
 
     node_id = 0 
     for (mx, my, nt) in nodes:
@@ -245,6 +420,29 @@ while running:
                         edges[i] = (id1, id2, locked)
 
                     nodes.pop(closest_node_id)
+        elif keys[pygame.K_0]:
+            if not toggle:
+                toggle = True 
+                file_path = save_file_explorer(".")
+                
+                if file_path:
+                    print("Exported Graph!")
+                    
+                    export(file_path)
+                else:
+                    print("No file selected")
+                
+                
+        elif keys[pygame.K_9]:
+            if not toggle:
+                toggle = True 
+                file_path = open_file_explorer(".")
+                if file_path:
+                    print("Imported Graph!")
+                    
+                    imp(file_path)
+                else:
+                    print("No file selected")
         else: 
             toggle = False     
 
@@ -259,6 +457,8 @@ while running:
     # pygame.draw.arc(screen, black, (x - radius, y - radius, radius * 2, radius * 2), 0, 2.0*3.141592653, 1)
     # Update the display
     pygame.display.flip()
+
+
 
 # Quit Pygame
 pygame.quit()

@@ -15,3 +15,5 @@ __**Control:**__
 
 - (Arrow keys) - Move around dungeon map
 - (Hoever + Delete) - Deletes node and all connected edges
+- (0) - Export map
+- (9) - Import Map
