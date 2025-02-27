@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Key-Lock Graph Editor</title>
+    <style>
+      body { margin: 0; overflow: hidden; }
+      canvas { background: #888; display: block; }
+      #fileInput { display: none; }
+      #downloadLink { display: none; }
+    </style>
+  </head>
+  <body>
+    <!-- Hidden file input for loading files -->
+    <input type="file" id="fileInput" accept=".klg">
+    <a id="downloadLink"></a>
+    <script>
+      // === Setup the canvas so it always covers the browser window ===
+      const canvas = document.createElement("canvas");
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext("2d");
+
+      // Global pan offsets so that (0,0) is centered.
+      let screenOffsetX = 0, screenOffsetY = 0;
+
+      // Resize canvas to cover the browser window and set the center as (0,0)
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        screenOffsetX = canvas.width / 2;
+        screenOffsetY = canvas.height / 2;
+      }
+      window.addEventListener("resize", resizeCanvas);
+      resizeCanvas();
+
+      // === Global graph data and state ===
+      let nodes = []; // Each node: { x, y, type } where (0,0) is the world origin.
+      let edges = []; // Each edge: { a, b, edgeType } where a and b are node indices
+      
+      // Add a couple of initial nodes (for testing this drawing code)
+      nodes.push({ x: 0, y: 0, type: "start" });
+      nodes.push({ x: 100, y: 100, type: "key" });
+
+      const radius = 25;
+      const lineWidth = 1.5;
+      let dragging = false;
+      let draggingNode = -1;
+      let toggle = false; // for one-shot key events
+      const keysPressed = {};
+
+      // Mouse position (canvas coordinates)
+      let mouseX = 0, mouseY = 0;
+
+      let lastTime = performance.now();
+
+      // === Utility Functions ===
+
+      // Snap a world coordinate (x,y) to the grid using radius as spacing.
+      function gridSnap(x, y) {
+        return {
+          x: Math.round(x / radius) * radius,
+          y: Math.round(y / radius) * radius
+        };
+      }
+
+      // Draw a polygon given an array of points [[x,y], ...]
+      function drawPolygon(points, fillColor, strokeColor) {
+        ctx.beginPath();
+        ctx.moveTo(points[0][0], points[0][1]);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i][0], points[i][1]);
+        }
+        ctx.closePath();
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+        ctx.strokeStyle = strokeColor;
+        ctx.stroke();
+      }
+
+      // Draw an edge between two points in world coordinates.
+      // "hasEndNode" determines whether the end is an actual node.
+      function drawLine(sx, sy, ex, ey, edgeType, hasEndNode) {
+        let dx = ex - sx, dy = ey - sy;
+        let mag = Math.sqrt(dx * dx + dy * dy);
+        if (mag === 0) return;
+        dx /= mag;
+        dy /= mag;
+        let lwx = -dy * lineWidth;
+        let lwy = dx * lineWidth;
+        let tx = dx * radius, ty = dy * radius;
+        let tsx = sx + tx, tsy = sy + ty;
+        let tex = ex, tey = ey;
+        if (hasEndNode) {
+          tex -= tx;
+          tey -= ty;
+        }
+
+        // Draw a small lock marker for locked edges.
+        if (edgeType === "locked") {
+          let cx = (tex + tsx) * 0.5;
+          let cy = (tey + tsy) * 0.5;
+          let perpX = -ty;
+          let perpY = tx;
+          let x1 = cx + perpX + screenOffsetX;
+          let y1 = cy + perpY + screenOffsetY;
+          let x2 = cx - perpX + screenOffsetX;
+          let y2 = cy - perpY + screenOffsetY;
+          let coordsLock = [
+            [x1 - lwy, y1 + lwx],
+            [x2 - lwy, y2 + lwx],
+            [x2 + lwy, y2 - lwx],
+            [x1 + lwy, y1 - lwx]
+          ];
+          drawPolygon(coordsLock, "black", "black");
+        }
+
+        let x1 = tsx + screenOffsetX;
+        let y1 = tsy + screenOffsetY;
+        let x2 = tex + screenOffsetX;
+        let y2 = tey + screenOffsetY;
+        let coords = [
+          [x1 + lwx, y1 + lwy],
+          [x2 + lwx, y2 + lwy],
+          [x2 - lwx, y2 - lwy],
+          [x1 - lwx, y1 - lwy]
+        ];
+        let col = (edgeType === "bomb") ? "red" : "black";
+        drawPolygon(coords, col, "black");
+      }
+
+      // Draw a node (circle and letter) in world coordinates.
+      function drawNode(node, highlight) {
+        let x = node.x + screenOffsetX;
+        let y = node.y + screenOffsetY;
+        // Draw circle outline.
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = "black";
+        ctx.stroke();
+
+        // Fill the circle.
+        ctx.fillStyle = highlight ? "green" : "white";
+        ctx.fill();
+
+        // If the node is a 'start' or 'key', add a letter.
+        if (node.type === "key" || node.type === "start") {
+          ctx.fillStyle = "black";
+          ctx.font = "20px Times New Roman";
+          let letter = (node.type === "key") ? "K" : "S";
+          let metrics = ctx.measureText(letter);
+          ctx.fillText(letter, x - metrics.width / 2, y + 7);
+        }
+      }
+
+      // === (File export/import functions are omitted for brevity) ===
+      // You can add those if needed following the previous sample.
+      function exportGraph() {
+        let defLine = "";
+        for (let node of nodes) {
+          if (node.type === "key")
+            defLine += "K";
+          else if (node.type === "start")
+            defLine += "S";
+          else if (node.type === "empty")
+            defLine += "E";
+        }
+
+        let edgeLine = "";
+        for (let edge of edges) {
+          edgeLine += edge.a + "," + edge.b;
+          if (edge.edgeType === "locked")
+            edgeLine += "L";
+          else if (edge.edgeType === "bomb")
+            edgeLine += "B";
+          else  // unlocked
+            edgeLine += "U";
+        }
+
+        let fileContents = defLine + "\n" + edgeLine + "\n";
+        for (let node of nodes) {
+          fileContents += (node.x / radius) + "," + (node.y / radius) + "\n";
+        }
+        return fileContents;
+      }
+
+      // Import graph from file contents
+      function importGraph(fileContents) {
+        nodes = [];
+        edges = [];
+        let lines = fileContents.split(/\r?\n/).filter(l => l.length > 0);
+        if (lines.length < 2) {
+          console.error("Invalid graph file?");
+          return;
+        }
+        let first = lines.shift();
+        for (let ch of first) {
+          if (ch === "S")
+            nodes.push({ x: 0, y: 0, type: "start" });
+          else if (ch === "K")
+            nodes.push({ x: 0, y: 0, type: "key" });
+          else if (ch === "E")
+            nodes.push({ x: 0, y: 0, type: "empty" });
+        }
+        let second = lines.shift();
+        let n1 = "";
+        let n2 = "";
+        let seenComma = false;
+        for (let ch of second) {
+          if (ch === ",") {
+            seenComma = true;
+            continue;
+          }
+          if (ch === "L" || ch === "U" || ch === "B") {
+            if (n1 === "" || n2 === "") continue;
+            let idx1 = parseInt(n1, 10);
+            let idx2 = parseInt(n2, 10);
+            let edgeType = (ch === "L") ? "locked" : (ch === "B" ? "bomb" : "unlocked");
+            if (idx1 >= nodes.length || idx2 >= nodes.length) {
+              console.error("Edge index out of range:", idx1, idx2);
+              return;
+            }
+            edges.push({ a: idx1, b: idx2, edgeType: edgeType });
+            n1 = "";
+            n2 = "";
+            seenComma = false;
+          } else {
+            if (!seenComma) {
+              n1 += ch;
+            } else {
+              n2 += ch;
+            }
+          }
+        }
+
+        if (lines.length !== nodes.length) {
+          console.error("Node count does not match positions");
+          return;
+        }
+
+        for (let i = 0; i < nodes.length; i++) {
+          let nums = lines[i].split(",");
+          let fx = parseFloat(nums[0]);
+          let fy = parseFloat(nums[1]);
+          nodes[i].x = fx * radius;
+          nodes[i].y = fy * radius;
+        }
+      }
+
+      function saveGraph() {
+        const fileText = exportGraph();
+        const blob = new Blob([fileText], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const downloadLink = document.getElementById("downloadLink");
+        downloadLink.href = url;
+        downloadLink.download = "graph.klg";
+        downloadLink.click();
+        URL.revokeObjectURL(url);
+        console.log("Exported Graph!");
+      }
+
+      function loadGraph() {
+        document.getElementById("fileInput").click();
+      }
+      document.getElementById("fileInput").addEventListener("change", function(evt) {
+        const file = evt.target.files[0];
+        if (!file) {
+          console.log("No file selected");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          importGraph(e.target.result);
+          console.log("Imported Graph!");
+        };
+        reader.readAsText(file);
+      });
+
+      // === Event Listeners ===
+
+      canvas.addEventListener("mousemove", function(evt) {
+        let rect = canvas.getBoundingClientRect();
+        mouseX = evt.clientX - rect.left;
+        mouseY = evt.clientY - rect.top;
+      });
+
+      canvas.addEventListener("mousedown", function(evt) {
+        // Convert mouse position (canvas) to world coordinates.
+        let worldX = mouseX - screenOffsetX;
+        let worldY = mouseY - screenOffsetY;
+        let pos = gridSnap(worldX, worldY);
+        // Use keys s, k, or e to create nodes.
+        if (keysPressed["s"]) {
+          nodes.push({ x: pos.x, y: pos.y, type: "start" });
+        } else if (keysPressed["k"]) {
+          nodes.push({ x: pos.x, y: pos.y, type: "key" });
+        } else if (keysPressed["e"]) {
+          nodes.push({ x: pos.x, y: pos.y, type: "empty" });
+        } else {
+          // Otherwise, check if the click is near an existing node (for dragging to create an edge).
+          let closestID = -1;
+          let closestD = Math.pow(radius * 1.3, 2);
+          for (let i = 0; i < nodes.length; i++) {
+            let dx = nodes[i].x - worldX;
+            let dy = nodes[i].y - worldY;
+            let d = dx * dx + dy * dy;
+            if (d < closestD) {
+              closestD = d;
+              closestID = i;
+            }
+          }
+          if (closestID !== -1) {
+            dragging = true;
+            draggingNode = closestID;
+          }
+        }
+      });
+
+      canvas.addEventListener("mouseup", function(evt) {
+        if (dragging) {
+          let worldX = mouseX - screenOffsetX;
+          let worldY = mouseY - screenOffsetY;
+          let closestID = -1;
+          let closestD = Math.pow(radius * 1.3, 2);
+          for (let i = 0; i < nodes.length; i++) {
+            let dx = nodes[i].x - worldX;
+            let dy = nodes[i].y - worldY;
+            let d = dx * dx + dy * dy;
+            if (d < closestD) {
+              closestD = d;
+              closestID = i;
+            }
+          }
+          if (closestID !== -1 && closestID !== draggingNode) {
+            let edgeType = keysPressed[" "] ? "unlocked" : "locked";
+            // Add the edge between the nodes.
+            // (Check for duplicates is omitted here for brevity.)
+            edges.push({ a: draggingNode, b: closestID, edgeType: edgeType });
+          }
+          dragging = false;
+          draggingNode = -1;
+        }
+      });
+
+      document.addEventListener("keydown", function(e) {
+        keysPressed[e.key] = true;
+        // For deletion (if needed):
+        if (e.key === "Delete" && !toggle) {
+          toggle = true;
+          let worldX = mouseX - screenOffsetX;
+          let worldY = mouseY - screenOffsetY;
+          let closestID = -1;
+          let closestD = Math.pow(radius * 1.3, 2);
+          for (let i = 0; i < nodes.length; i++) {
+            let dx = nodes[i].x - worldX;
+            let dy = nodes[i].y - worldY;
+            let d = dx * dx + dy * dy;
+            if (d < closestD) {
+              closestD = d;
+              closestID = i;
+            }
+          }
+          if (closestID !== -1) {
+            edges = edges.filter(edge => edge.a !== closestID && edge.b !== closestID);
+            for (let edge of edges) {
+              if (edge.a > closestID) edge.a--;
+              if (edge.b > closestID) edge.b--;
+            }
+            nodes.splice(closestID, 1);
+          }
+        }
+        if (e.key === "0" && !toggle) {
+          toggle = true;
+          saveGraph();
+        }
+        if (e.key === "9" && !toggle) {
+          toggle = true;
+          loadGraph();
+        }
+      });
+      document.addEventListener("keyup", function(e) {
+        keysPressed[e.key] = false;
+        if (e.key === "Delete" || e.key === "0" || e.key === "9") toggle = false;
+      });
+
+      // Use arrow keys to pan the view.
+      function updatePan(deltaTime) {
+        const speed = 0.5;
+        if (keysPressed["ArrowUp"]) screenOffsetY += speed * deltaTime;
+        if (keysPressed["ArrowDown"]) screenOffsetY -= speed * deltaTime;
+        if (keysPressed["ArrowLeft"]) screenOffsetX += speed * deltaTime;
+        if (keysPressed["ArrowRight"]) screenOffsetX -= speed * deltaTime;
+      }
+
+      // === Main Render Loop ===
+      function gameLoop(now) {
+        let deltaTime = now - lastTime;
+        lastTime = now;
+        updatePan(deltaTime);
+
+        // Clear entire canvas.
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // If not dragging and if a key is held for node creation, show a preview.
+        if (!dragging && (keysPressed["s"] || keysPressed["k"] || keysPressed["e"])) {
+          let worldX = mouseX - screenOffsetX;
+          let worldY = mouseY - screenOffsetY;
+          let pos = gridSnap(worldX, worldY);
+          let previewType = keysPressed["s"] ? "start" : (keysPressed["k"] ? "key" : "empty");
+          drawNode({ x: pos.x, y: pos.y, type: previewType }, false);
+        }
+
+        // If dragging, show the edge preview.
+        if (dragging && draggingNode !== -1) {
+          let startNode = nodes[draggingNode];
+          let worldX = mouseX - screenOffsetX;
+          let worldY = mouseY - screenOffsetY;
+          let closestID = -1;
+          let closestD = Math.pow(radius * 1.3, 2);
+          for (let i = 0; i < nodes.length; i++) {
+            let dx = nodes[i].x - worldX;
+            let dy = nodes[i].y - worldY;
+            let d = dx * dx + dy * dy;
+            if (d < closestD) {
+              closestD = d;
+              closestID = i;
+            }
+          }
+          let edgeType = keysPressed[" "] ? "unlocked" : "locked";
+          if (closestID !== -1 && closestID !== draggingNode) {
+            let target = nodes[closestID];
+            drawLine(startNode.x, startNode.y, target.x, target.y, edgeType, true);
+          } else {
+            drawLine(startNode.x, startNode.y, worldX, worldY, edgeType, false);
+          }
+        }
+
+        // Draw every edge.
+        for (let edge of edges) {
+          let nA = nodes[edge.a];
+          let nB = nodes[edge.b];
+          drawLine(nA.x, nA.y, nB.x, nB.y, edge.edgeType, true);
+        }
+
+        // Determine the node closest to the mouse (for highlight)
+        let worldX = mouseX - screenOffsetX;
+        let worldY = mouseY - screenOffsetY;
+        let closestID = -1;
+        let closestD = Math.pow(radius * 1.3, 2);
+        for (let i = 0; i < nodes.length; i++) {
+          let dx = nodes[i].x - worldX;
+          let dy = nodes[i].y - worldY;
+          let d = dx * dx + dy * dy;
+          if (d < closestD) {
+            closestD = d;
+            closestID = i;
+          }
+        }
+
+        // Draw all nodes with the closest node highlighted.
+        for (let i = 0; i < nodes.length; i++) {
+          drawNode(nodes[i], (i === closestID));
+        }
+
+        requestAnimationFrame(gameLoop);
+      }
+      requestAnimationFrame(gameLoop);
+    </script>
+  </body>
+</html>
