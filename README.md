@@ -132,51 +132,76 @@ $$
 It follows that $d$ may be extended by $e_n$,
 and thus $G$ is strongly solvable.
 
+# Gluing
 
-<!-- Note that if $N=0$, it is well-keyed vacuously.
+Let $G_1,G_2$ be disjoint dungeon graphs with
+$g_1\in V(G_1),g_2\in V_{G_2}$.
+These graphs may be **glued** together
+as $G=(G_1\cup G_2)/\{g_1,g_2\}$ by
+identifying $g_1$ with $g_2$ as $g$, where $s_G=s_{G_1}$
+and $T_G(g)=T_{G_1}(g_1)+T_{G_2}(g_2)$.
 
-So suppose the inequality holds for $N$;
-we will show it holds for $N+1$.
-So given a complete dive $d$ of $P_{N+1}$, note that it must be
-$d=\langle e_0,\cdots,e_n\rangle$ with $e_m=\{v_m,v_{m+1}\}$.
-We see immediately that $\langle e_0,\cdots, e_{n-1}\rangle$ is a
-complete dive of $P_N$, showing it is solvable, and therefore
-$$
-\sum_{m=0}^{n} T(v_m)(k) \geq {n + 1}
-$$
-for all $0\leq n<N$.
-It remains to be shown that
-$$
-\sum_{n=0}^{N} k(R_n) \geq N + 1.
-$$
+## Theroem
 
-But we have that $d$ is a complete dive, and if we let $W''$ be the
-initial subwalk of $W$ removing all vertices following the first vertex of $R_{N+1}$,
-we must have $k(W'')\geq l(W'')$. Thus we may conclude
-$$
-\sum_{n=0}^{N} k(R_n) \geq
-k(W'') \geq
-l(W'') =
-N+1.
-$$
+Let $G_1,G_2$ be disjoint [strongly]
+solvable dungeon graphs with $g\in G_1$.
+Then $(G_1\cup G_2)/\{g,s_{G_2}\}$ is [strongly]
+solvable.
 
-&nbsp;
+### Proof
 
-So finally, assume $G$ is a well-keyed tunnel graph;
-we will show that it satisfies $SK_2$. To do this, let $W$ be a partial
-admissible walk; we will show that it can be extended to use one more
-lock edge.
+First let $d_1,d_2$ be complete dives for $G_1,G_2$
+respectively. Then $d_1d_2$ is a complete dive for
+$(G_1\cup G_2)/\{g,s_{G_2}\}$.
 
-If $G$ has $N$ locks and $N+1$ regions, then $W$ uses $M$ lock edges for
-some $M<N$; in particular, it must use the lock edges $L_0,\dots,L_{M-1}$.
-It follows that it includes vertices in regions $R_m$ for all
-$0\leq m\leq M$. Thus it may be extended to an admissible walk $W'$ that
-includes all vertices in those regions.
+Now assume $G_1,G_2$ are strongly solvable, and consider
+an incomplete dive $d$ of $(G_1\cup G_2)/\{g,s_{G_2}\}$.
+Suppose it cannot be extended by an edge in $G_1$.
 
-Since the graph is well-keyed, there exist at least $M+1$ keys in these
-regions. Thus $W'$ may be extended to an admissible walk that uses $L_M$.
-$\square$ -->
+If the
+restriction $d_{G_1}$ of $d$ to edges in $G_1$ is complete,
+then it follows that the restriction $d_{G_2}$ of $d$
+to edges in $G_2$ is an incomplete dive in $G_2$, and thus
+can be extended by some $e\in E(G_2)$. It follows that
+$d$ can be extended by $e$ as well.
 
+Otherwise, $d_{G_1}$ can be extended by an edge $e\in E(G_1)$
+as a dive in $G_1$. Since this edge cannot extend $d$ in $G$,
+it must be that while
+$$T_{G_1/d_1}(s_{G_1/d_1})(i)\geq B_{G_1/d_1}(e)(i)=B_G(e)(i)$$
+for all $i\in I$,
+$$T_{G/d}(s_{G/d})(i)< B_{G/d}(e)(i)=B_G(e)(i)$$
+for some $i\in I$. Now if $i\in I_p$ was
+permanent, we'd have that
+$$B_G(e)(i)>T_{G/d}(s_{G/d})\geq T_{G_1/d_1}(s_{G_1/d_1})
+\geq B_G(e)(i),$$
+a contradiction.
+
+So we have $i\in I_e$ exhaustible and
+$T_{G/d}(s_{G/d})< T_{G_1/d_1}(s_{G_1/d_1})$.
+We recall that, denoting $d=\langle e_0,\dots,e_{|d|-1}\rangle$
+with $e_m=\{v_m,v_{m+1}\}$
+and $d_1=\langle e_0',\dots,e_{|d_1|-1}'\rangle$
+with $e_m'=\{v_m',v_{m+1}'\}$,
+$$T_{G/d}(s_{G/d})(i)=\sum_{m=0}^{|d|}
+T_{G}(v_m)(i)-
+\sum_{m=0}^{|d|-1} B_{G}(e_m)(i)$$
+and
+$$T_{G_1/d_1}(s_{G_1/d_1})(i)=\sum_{m=0}^{|d_1|}
+T_{G_1}(v_m')(i)-
+\sum_{m=0}^{|d_1|-1} B_{G_1}(e_m')(i).$$
+
+It's immediate that
+$\sum_{m=0}^{|d|}T_{G}(v_m)(i)\geq
+\sum_{m=0}^{|d_1|}T_{G_1}(v_m')(i)$ since
+$\{v_m:0\leq m<|d|\}\supseteq\{v_m':0\leq m<|d_1|\}$.
+Therefore we must have
+$$\sum_{m=0}^{|d|-1} B_{G}(e_m)(i)>
+\sum_{m=0}^{|d_1|-1} B_{G_1}(e_m')(i).$$
+
+In particular, we have,
+denoting $d_2=\langle e_0'',\cdots,e_{|d_2|-1}''\rangle$,
+$$\sum_{m=0}^{|d_2|-1} B_{G_2}(e_m'')(i)> 0.$$
 
 # Old Key-Lock Graph Jupyter Notebooks
 
