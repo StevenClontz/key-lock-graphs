@@ -203,6 +203,8 @@ In particular, we have,
 denoting $d_2=\langle e_0'',\cdots,e_{|d_2|-1}''\rangle$,
 $$\sum_{m=0}^{|d_2|-1} B_{G_2}(e_m'')(i)> 0.$$
 
+(TODO, finish)
+
 # Old Key-Lock Graph Jupyter Notebooks
 
 1. [Basics](notebooks/basics.ipynb)
