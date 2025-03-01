@@ -8,28 +8,29 @@
 
 A **dungeon graph** is a graph $G$ (multigraph, loops allowed)
 which has an **item set** $I=I_e\cup I_p$ partitioned into
-**exhaustible** ($I_e$) and **permanent** ($I_p$) items, a
+**consumable** ($I_c$) and **permanent** ($I_p$) items, a
 **treasure map** $T_G:V(G)\to \omega^I$, a **barrier map**
 $B_G:E(G)\to \omega^I$, and a **starting vertex** $s_G\in V(G)$.
 
 A **move** in a dungeon graph $G$ is
-an edge $p=\{s_G,v\}$ satisfying
+an edge $e=\{s_G,v\}$ satisfying
 $$T_G(s_G)(i)\geq B_G(p)(i)$$
-for all $i\in I$. Each move defines a new dungeon graph $G/p$
-contracting the edge $p$ to its starting vertex $s_{G/p}$,
+for all $i\in I$. Each move defines a new dungeon graph $G/e$
+contracting the edge $e$ to its starting vertex $s_{G/e}$,
 such that
-$$B_{G/p}(e)=B_G(e), T_{G/p}(w)=T_G(w)$$
-for all $e\in E(G/p), w\in V(G/p)\setminus\{s_{G/p}\}$,
-$$T_{G/p}(s_{G/p})(i)=T_G(s_G)(i)+T_G(v)(i)$$ 
+$$B_{G/e}(e')=B_G(e'), T_{G/e}(v')=T_G(v')$$
+for all $e'\in E(G/e), v'\in V(G/e)\setminus\{s_{G/e}\}$,
+$$T_{G/e}(s_{G/e})(i)=T_G(s_G)(i)+T_G(v)(i)$$ 
 for $i\in I_p$, and
-$$T_{G/p}(s_{G/p})(i)=T_G(s_G)(i)+T_G(v)(i)-B_G(e)(i)$$
-for $i\in I_e$.
+$$T_{G/e}(s_{G/e})(i)=T_G(s_G)(i)+T_G(v)(i)-B_G(e)(i)$$
+for $i\in I_c$.
 
 For a sequence of edges
 $d=\langle e_0,e_1,\dots,e_{n-1}\rangle$, let
 $d\upharpoonright m=\langle e_0,e_1,\dots,e_{m-1}\rangle$
 restrict $d$ to its first $m$ edges, and let
-$G/(d\upharpoonright m)=G/e_0\cdots e_{m-1}$.
+$G/(d\upharpoonright m)=G/e_0\cdots e_{m-1}=
+((G/e_0)/\cdots)/e_{m-1}$.
 Then $d$ is a **dive** provided each
 $e_m$ is a move from $G/(d\upharpoonright m)$ to
 $G/(d\upharpoonright m+1)$.
@@ -155,55 +156,16 @@ respectively. Then $d_1d_2$ is a complete dive for
 $(G_1\cup G_2)/\{g,s_{G_2}\}$.
 
 Now assume $G_1,G_2$ are strongly solvable, and consider
-an incomplete dive $d$ of $(G_1\cup G_2)/\{g,s_{G_2}\}$.
-Suppose it cannot be extended by an edge in $G_1$.
+an incomplete dive $d$ of $G=(G_1\cup G_2)/\{g,s_{G_2}\}$.
+If $G/d$ hasn't reached $g=s_{G_2}$, then $d$ is an
+incomplete dive of $G_1$ and can be extended in $G_1$
+by strong solvability.
 
-If the
-restriction $d_{G_1}$ of $d$ to edges in $G_1$ is complete,
-then it follows that the restriction $d_{G_2}$ of $d$
-to edges in $G_2$ is an incomplete dive in $G_2$, and thus
-can be extended by some $e\in E(G_2)$. It follows that
-$d$ can be extended by $e$ as well.
-
-Otherwise, $d_{G_1}$ can be extended by an edge $e\in E(G_1)$
-as a dive in $G_1$. Since this edge cannot extend $d$ in $G$,
-it must be that while
-$$T_{G_1/d_1}(s_{G_1/d_1})(i)\geq B_{G_1/d_1}(e)(i)=B_G(e)(i)$$
-for all $i\in I$,
-$$T_{G/d}(s_{G/d})(i)< B_{G/d}(e)(i)=B_G(e)(i)$$
-for some $i\in I$. Now if $i\in I_p$ was
-permanent, we'd have that
-$$B_G(e)(i)>T_{G/d}(s_{G/d})\geq T_{G_1/d_1}(s_{G_1/d_1})
-\geq B_G(e)(i),$$
-a contradiction.
-
-So we have $i\in I_e$ exhaustible and
-$T_{G/d}(s_{G/d})< T_{G_1/d_1}(s_{G_1/d_1})$.
-We recall that, denoting $d=\langle e_0,\dots,e_{|d|-1}\rangle$
-with $e_m=\{v_m,v_{m+1}\}$
-and $d_1=\langle e_0',\dots,e_{|d_1|-1}'\rangle$
-with $e_m'=\{v_m',v_{m+1}'\}$,
-$$T_{G/d}(s_{G/d})(i)=\sum_{m=0}^{|d|}
-T_{G}(v_m)(i)-
-\sum_{m=0}^{|d|-1} B_{G}(e_m)(i)$$
-and
-$$T_{G_1/d_1}(s_{G_1/d_1})(i)=\sum_{m=0}^{|d_1|}
-T_{G_1}(v_m')(i)-
-\sum_{m=0}^{|d_1|-1} B_{G_1}(e_m')(i).$$
-
-It's immediate that
-$\sum_{m=0}^{|d|}T_{G}(v_m)(i)\geq
-\sum_{m=0}^{|d_1|}T_{G_1}(v_m')(i)$ since
-$\{v_m:0\leq m<|d|\}\supseteq\{v_m':0\leq m<|d_1|\}$.
-Therefore we must have
-$$\sum_{m=0}^{|d|-1} B_{G}(e_m)(i)>
-\sum_{m=0}^{|d_1|-1} B_{G_1}(e_m')(i).$$
-
-In particular, we have,
-denoting $d_2=\langle e_0'',\cdots,e_{|d_2|-1}''\rangle$,
-$$\sum_{m=0}^{|d_2|-1} B_{G_2}(e_m'')(i)> 0.$$
-
-(TODO, finish)
+Otherwise, aiming for a contradiction, suppose $d$
+cannot be extended in $G$. It follows that for
+each $e\in E(G)\setminus \operatorname{range} d$,
+there is some item $i_e\in I$ with
+$T_{G/d}(s_{G/d})(i_e)<B_{G/d}(e)(i_e)$.
 
 # Old Key-Lock Graph Jupyter Notebooks
 
