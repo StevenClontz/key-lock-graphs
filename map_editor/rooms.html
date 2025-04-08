@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Key-Lock Graph Editor</title>
+    <style>
+      body { margin: 0; overflow: hidden; }
+      canvas { background: #888; display: block; }
+      #fileInput { display: none; }
+      #downloadLink { display: none; }
+    </style>
+  </head>
+  <body>
+    <!-- Hidden file input for loading files -->
+    <input type="file" id="fileInput" accept=".klg">
+    <a id="downloadLink"></a>
+    <script>
+        
+
+      // === Setup the canvas so it always covers the browser window ===
+      const canvas = document.createElement("canvas");
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext("2d");
+
+      const roomImage = new Image();
+      roomImage.src = './assets/empty_room.png';
+
+      const startTiles = new Image();
+      startTiles.src = "./assets/start_tiles.png";
+
+      const bricks = new Image();
+      bricks.src = "./assets/brick.png";
+
+      const keyImage = new Image();
+      keyImage.src = "./assets/items/key.png";
+
+      const redKeyImage = new Image();
+      redKeyImage.src = "./assets/items/key_red.png";
+
+      const closedEdge = new Image();
+      closedEdge.src = "./assets/edges/closed_edge.png";
+      const lockedEdge = new Image();
+      lockedEdge.src = "./assets/edges/locked_edge.png";
+      const openEdge = new Image();
+      openEdge.src = "./assets/edges/open_edge.png";
+      const itemEdge = new Image();
+      itemEdge.src = "./assets/edges/item_edge.png";
+      const bowEdge = new Image();
+      bowEdge.src = "./assets/edges/bow_edge.png";
+      const bombEdge = new Image();
+      bombEdge.src = "./assets/edges/bomb_edge.png";
+      
+      let sideImages = [
+          closedEdge, lockedEdge, openEdge, itemEdge, bowEdge, bombEdge
+      ];
+
+      
+      // Constants 
+      const closedEdgeID = 0; 
+      const lockedEdgeID = 1; 
+      const openEdgeID = 2; 
+      const itemEdgeID = 3; 
+      const bowEdgeID = 4; 
+
+      const topID = 0; 
+      const bottomID = 1; 
+      const leftID = 2; 
+      const rightID = 3; 
+
+
+      // === Global graph data and state ===
+      let selectedEdge = openEdgeID;
+
+      let tileDragX;
+      let tileDragY; 
+
+      class CoordinateMap {
+          constructor() {
+              this.map = new Map();
+          }
+
+          getKey(x, y) {
+              return `${x},${y}`;
+          }
+
+          set(x, y, value) {
+              const key = this.getKey(x, y);
+              this.map.set(key, value);
+          }
+
+          get(x, y) {
+              const key = this.getKey(x, y);
+              return this.map.get(key);
+          }
+
+          has(x, y) {
+              const key = this.getKey(x, y);
+              return this.map.has(key);
+          }
+
+          delete(x, y) {
+              const key = this.getKey(x, y);
+              return this.map.delete(key);
+          }
+      }
+
+      class Room {
+          constructor(x, y) {
+              this.x = Math.floor(x); 
+              this.y = Math.floor(y); 
+              
+              this.verticalSide = closedEdgeID;
+              this.horizontalSide = closedEdgeID; 
+              
+              this.virtualLeft = closedEdgeID;
+              this.virtualBottom = closedEdgeID;
+
+              this.isEntrance = false; 
+
+              this.hasKey = false; 
+          }
+          
+          drawItems(context, isHover, hasKey) {
+              let gx = this.x*256*scale + euclidSnap(screenOffsetX, scale);
+              let gy = this.y*176*scale + euclidSnap(screenOffsetY, scale);  
+              if(hasKey) {
+                  let img = keyImage;
+                  if(isHover) img = redKeyImage; 
+                  context.drawImage(img, gx + 128*scale, gy + 80*scale, 16*scale, 16*scale);  
+              }
+          }
+
+          draw(context, color) {
+              if(!rooms.has(this.x, this.y - 1)) {
+                this.verticalSide = closedEdgeID; 
+              }
+              if(!rooms.has(this.x + 1, this.y)) {
+                this.horizontalSide = closedEdgeID; 
+              }
+              
+              let topSide = this.verticalSide;
+              if(virtualRooms.has(this.x, this.y - 1)) {
+                  topSide = virtualRooms.get(this.x, this.y - 1).virtualBottom; 
+              }
+              let rightSide = this.horizontalSide; 
+              if(virtualRooms.has(this.x + 1, this.y)) {
+                  rightSide = virtualRooms.get(this.x + 1, this.y).virtualLeft; 
+              }
+
+              let leftSide = this.virtualLeft; 
+              if(rooms.has(this.x - 1, this.y) && leftSide == closedEdgeID) {
+                leftSide = rooms.get(this.x - 1, this.y).horizontalSide;
+              }
+              if(virtualRooms.has(this.x - 1, this.y)) {
+                leftSide = virtualRooms.get(this.x - 1, this.y).horizontalSide;
+              }
+
+              let bottomSide = this.virtualBottom; 
+              if(rooms.has(this.x, this.y + 1) && bottomSide == closedEdgeID) {
+                bottomSide = rooms.get(this.x, this.y + 1).verticalSide;
+              }
+              if(virtualRooms.has(this.x, this.y + 1)) {
+                bottomSide = virtualRooms.get(this.x, this.y + 1).verticalSide;
+              }
+              
+              if(this.isEntrance) {
+                bottomSide = openEdgeID; 
+              } 
+
+              let gx = this.x*256*scale + euclidSnap(screenOffsetX, scale);
+              let gy = this.y*176*scale + euclidSnap(screenOffsetY, scale);
+              context.drawImage(roomImage, gx, gy, 256*scale, 176*scale);
+              
+              context.drawImage(sideImages[leftSide], 0, 0, 32, 48, gx, gy + 64*scale, 32*scale, 48*scale);
+              context.drawImage(sideImages[rightSide], 48, 0, 32, 48, gx + 224*scale, gy + 64*scale, 32*scale, 48*scale);
+              context.drawImage(sideImages[topSide], 0, 64, 32, 32  , gx + 112*scale, gy, 32*scale, 32*scale);
+              context.drawImage(sideImages[bottomSide], 48, 64, 32, 32, gx + 112*scale, gy + 144*scale, 32*scale, 32*scale);
+
+              if(this.isEntrance) {
+                  context.drawImage(startTiles, gx + 32*scale, gy + 32*scale, 192*scale, 112*scale); 
+                  context.drawImage(bricks, gx, gy + 176*scale, 256*scale, 176*scale); 
+              }
+
+              if(color != null) {
+                  context.fillStyle = color; // Tint color (red with 50% alpha)
+                  context.fillRect(gx, gy, 256*scale, 176*scale);
+              }
+              context.fillStyle = 'rgba(255, 255, 255, 1.0)';
+          }
+          
+          getHoverSide(checkX, checkY) {
+              let gx = this.x*256*scale;// + euclidSnap(screenOffsetX, scale);
+              let gy = this.y*176*scale;// + euclidSnap(screenOffsetY, scale);
+
+              let offsetX = (checkX - gx) / scale; 
+              let offsetY = (checkY - gy) / scale;
+
+              // Top bottom 
+              if(offsetX > 64 && offsetX < 192) {
+                  if(offsetY >= 0 && offsetY < 48) {
+                      return topID;
+                  }
+                  if(offsetY >= 144 && offsetY <= 176) {
+                      return bottomID; 
+                  }
+              // Let Right
+              } else if(offsetY > 64 && offsetY < 112) {
+                  if(offsetX >= 0 && offsetX < 48) {
+                      return leftID;  
+                  }
+                  if(offsetX >= 224 && offsetX < 256) {
+                      return rightID; 
+                  }
+              }
+              return -1; 
+          }
+          
+          getCenterHovered(checkX, checkY) {
+              let gx = this.x*256*scale;
+              let gy = this.y*176*scale;
+
+              let offsetX = (checkX - gx) / scale; 
+              let offsetY = (checkY - gy) / scale;
+
+              if(offsetX >= 32 && offsetY >= 32 && offsetX < 224 && offsetY < 144) {
+                  return true; 
+              } else {
+                  return false; 
+              }
+          }
+      }
+
+      let rooms = new CoordinateMap(); 
+      let virtualRooms = new CoordinateMap(); 
+      // Setup the entrance room. 
+      let entrance = new Room(0, 0); 
+      entrance.isEntrance = true; 
+      
+      rooms.set(entrance.x, entrance.y, entrance); 
+
+
+      const radius = 25;
+      const lineWidth = 1.5;
+
+      let scale = 3;  
+
+      // Initially, place (0,0) at the center.
+      let screenOffsetX = canvas.width / 2;
+      let screenOffsetY = canvas.height / 2;
+      
+      let dragging = false;
+      let draggingNode = -1;
+      let toggle = false; // for one-shot key events
+
+      // Store pressed keys.
+      const keysPressed = {};
+
+      // Mouse position in canvas coordinates.
+      let mouseX = 0, mouseY = 0;
+
+      // For delta-time calculation:
+      let lastTime = performance.now();
+
+
+      // Function to resize the canvas to fill the browser window.
+      function resizeCanvas() {
+        canvas.width  = window.innerWidth;
+        canvas.height = window.innerHeight;
+        // Reset the pan/offset so that (0,0) is the center.
+      }
+      
+      screenOffsetX = canvas.width / 2;
+      screenOffsetY = canvas.height / 2;
+
+      window.addEventListener("resize", resizeCanvas);
+      resizeCanvas();
+
+
+      // === Utility Functions ===
+
+      // Snap an (x, y) world position to the nearest grid using radius as spacing.
+      function gridSnap(x, y) {
+        let snappedX = Math.round(x / radius) * radius;
+        let snappedY = Math.round(y / radius) * radius;
+        return { x: snappedX, y: snappedY };
+      }
+
+      // Draw a polygon given an array of points [[x,y], ...]
+      function drawPolygon(points, fillColor, strokeColor) {
+        ctx.beginPath();
+        ctx.moveTo(points[0][0], points[0][1]);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i][0], points[i][1]);
+        }
+        ctx.closePath();
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+        ctx.strokeStyle = strokeColor;
+        ctx.stroke();
+      }
+
+      function saveGraph() {
+        const fileText = exportGraph();
+        const blob = new Blob([fileText], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const downloadLink = document.getElementById("downloadLink");
+        downloadLink.href = url;
+        downloadLink.download = "graph.klg";
+        downloadLink.click();
+        URL.revokeObjectURL(url);
+        console.log("Exported Graph!");
+      }
+
+      function loadGraph() {
+        document.getElementById("fileInput").click();
+      }
+      
+      document.getElementById("fileInput").addEventListener("change", function(evt) {
+        const file = evt.target.files[0];
+        if (!file) {
+          console.log("No file selected");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          importGraph(e.target.result);
+          console.log("Imported Graph!");
+        };
+        reader.readAsText(file);
+      });
+
+      // === Event Listeners ===
+
+      canvas.addEventListener("mousemove", function(evt) {
+        let rect = canvas.getBoundingClientRect();
+        mouseX = evt.clientX - rect.left;
+        mouseY = evt.clientY - rect.top;
+      });
+
+      canvas.addEventListener("mousedown", function(evt) {
+        // Convert mouse pos to world position.
+        let worldX = mouseX - screenOffsetX;
+        let worldY = mouseY - screenOffsetY;
+        let rm_dat = findRoomPlacement(worldX, worldY);  
+        if(rm_dat != null) {
+            let rm = rm_dat[0];
+            let sideID = rm_dat[1]
+            let xy = rm_dat[2]; 
+
+            let virtualBottom = rm.virtualBottom;
+            rm.virtualBottom = closedEdgeID; 
+
+            let virtualLeft = rm.virtualLeft;
+            rm.virtualLeft = closedEdgeID; 
+
+            let currentRoom = rooms.get(xy[0], xy[1]);
+            
+            switch(sideID) {
+                case topID:
+                    currentRoom.verticalSide = virtualBottom; 
+                    break; 
+                case bottomID:
+                    break; 
+                case leftID:
+                    break; 
+                case rightID:
+                    currentRoom.horizontalSide = virtualLeft; 
+                    break
+                default: 
+            }
+            if(rm.x == 0 && rm.y == 1) {
+                return; 
+            }
+ 
+            rooms.set(xy[0], xy[1], currentRoom); 
+            rooms.set(rm.x, rm.y, rm); 
+        }
+
+        let xy = getRoomXY(worldX, worldY);
+        if(rooms.has(xy[0], xy[1]) && (xy[0] != 0 || xy[1] != 0)) {
+            let room = rooms.get(xy[0], xy[1]);
+            if(room.getCenterHovered(worldX, worldY)) {  
+                room.hasKey = !room.hasKey; 
+            } 
+        }
+        
+        // let pos = gridSnap(worldX, worldY);        
+        // let worldX = mouseX - screenOffsetX;
+        // let worldY = mouseY - screenOffsetY;
+        // let tileX = euclidSnap(Math.floor(worldX / scale), 16);
+        // let tileY = euclidSnap(Math.floor(worldY / scale), 16);
+        // if(!dragging) {
+        //     tileDragX = tileX;
+        //     tileDragY = tileY; 
+        // }
+        // dragging = true; 
+      });
+
+      canvas.addEventListener("mouseup", function(evt) {
+        // if (dragging) {
+        //     let worldX = mouseX - screenOffsetX;
+        //     let worldY = mouseY - screenOffsetY;
+        //     let tileX = euclidSnap(Math.floor(worldX / scale), 16);
+        //     let tileY = euclidSnap(Math.floor(worldY / scale), 16);
+        //     dragging = false;
+        // }
+      });
+
+      document.addEventListener("keydown", function(e) {
+        keysPressed[e.key] = true;
+        if (e.key === "Delete") {
+            let worldX = mouseX - screenOffsetX;
+            let worldY = mouseY - screenOffsetY;
+
+            let xy = getRoomXY(worldX, worldY);
+            if(rooms.has(xy[0], xy[1]) && (xy[0] != 0 || xy[1] != 0)) {
+                let room = rooms.get(xy[0], xy[1])
+                if(room.getCenterHovered(worldX, worldY)) {  
+                    rooms.delete(xy[0], xy[1]); 
+                } 
+            }
+        } 
+
+        if (e.key === "1" || e.key === "2" || e.key === "3" || e.key === "4" || e.key === "5" || e.key === "6") {
+            selectedEdge = parseInt(e.key) - 1; 
+        }
+        
+        if (e.key == "-") { 
+            scale *= 0.9;
+        }
+        if (e.key == "=") {
+            scale /= 0.9; 
+        }
+
+      });
+
+      document.addEventListener("keyup", function(e) {
+        keysPressed[e.key] = false;
+        if (e.key === "Delete" || e.key === "0" || e.key === "9") {
+          toggle = false;
+        }
+      });
+
+      // Pan the view with arrow keys.
+      function updatePan(deltaTime) {
+        let speed = 0.5;
+        if (keysPressed["ArrowUp"]) {
+          screenOffsetY += speed * deltaTime;
+        }
+        if (keysPressed["ArrowDown"]) {
+          screenOffsetY -= speed * deltaTime;
+        }
+        if (keysPressed["ArrowLeft"]) {
+          screenOffsetX += speed * deltaTime;
+        }
+        if (keysPressed["ArrowRight"]) {
+          screenOffsetX -= speed * deltaTime;
+        }
+      }
+
+      // === Game Loop ===
+
+      function euclidMod(dividend, divisor) {
+        const result = dividend % divisor;
+        return result < 0 ? result + Math.abs(divisor) : result;
+      }
+
+      function euclidSnap(dividend, divisor) {
+        if(dividend < 0) {
+            return Math.floor(dividend / divisor) * divisor;  
+        } else {
+            return Math.floor(dividend / divisor) * divisor;
+        }
+      }
+
+      function getRoomXY(worldX, worldY) {
+          let roomGlobalX = euclidSnap(Math.floor(worldX / scale), 256);
+          let roomGlobalY = euclidSnap(Math.floor(worldY / scale), 176);
+
+          let roomX = Math.floor(roomGlobalX / 256);
+          let roomY = Math.floor(roomGlobalY / 176);
+
+          return [roomX, roomY]; 
+      }
+ 
+      function findRoomPlacement(worldX, worldY) {
+          let roomGlobalX = euclidSnap(Math.floor(worldX / scale), 256);
+          let roomGlobalY = euclidSnap(Math.floor(worldY / scale), 176);
+
+          let roomX = Math.floor(roomGlobalX / 256);
+          let roomY = Math.floor(roomGlobalY / 176);
+          if(rooms.has(roomX, roomY)) {
+              let room = rooms.get(roomX, roomY); 
+              let sideID = room.getHoverSide(worldX, worldY); 
+              
+              if(sideID != -1) {
+                  let offset = [0, 0];
+                  switch(sideID) {
+                      case topID:
+                          offset = [0, -1];
+                          break; 
+                      case bottomID:
+                          offset = [0, 1];
+                          break; 
+                      case leftID:
+                          offset = [-1, 0];
+                          break; 
+                      case rightID:
+                          offset = [1, 0];
+                          break
+                      default: 
+                  }
+
+                  let rm = null; 
+                  if(!rooms.has(roomX + offset[0], roomY + offset[1])) {
+                      rm = new Room(roomX + offset[0], roomY + offset[1]); 
+                  } else {
+                      let temp = (rooms.get(roomX + offset[0], roomY + offset[1]));
+                      rm = Object.assign(Object.create(Object.getPrototypeOf(temp)), temp);
+
+                      if(rooms.has(rm.x - 1, rm.y)) {
+                          rm.virtualLeft = rooms.get(rm.x - 1, rm.y).horizontalSide; 
+                      }
+                      if(rooms.has(rm.x, rm.y + 1)) {
+                          rm.virtualBottom = rooms.get(rm.x, rm.y + 1).verticalSide; 
+                      }
+
+                  }
+
+                  switch(sideID) {
+                      case topID:
+                          rm.virtualBottom = selectedEdge;
+                          break; 
+                      case bottomID:
+                          rm.verticalSide = selectedEdge;
+                          break; 
+                      case leftID:
+                          rm.horizontalSide = selectedEdge;
+                          break; 
+                      case rightID:
+                          rm.virtualLeft = selectedEdge;
+                          break
+                      default: 
+                  }
+                  return [rm, sideID, [roomX, roomY]]; 
+              
+              }
+          }
+          return null; 
+      }
+
+      function gameLoop(now) {
+        // Reset every game loop. 
+        virtualRooms = new CoordinateMap();
+
+        ctx.globalAlpha = 1.0; 
+        let deltaTime = now - lastTime;
+        lastTime = now;
+        updatePan(deltaTime);
+
+
+        // Clear entire canvas.
+        ctx.clearRect(0, 0, canvas.width, canvas.height);  
+
+        let scaledWidth = Math.floor(canvas.width / scale); 
+        let scaledHeight = Math.floor(canvas.height / scale); 
+        
+        let roomsWidth = Math.floor(scaledWidth / 256); 
+        let roomsHeight = Math.floor(scaledHeight / 176); 
+        for(let i = -1; i <= roomsWidth; i++) {
+            for(let j = -1; j <= roomsHeight; j++) {
+                let xPhase = Math.floor(screenOffsetX / 256 / scale); 
+                let roomX = Math.floor(euclidMod(Math.floor(screenOffsetX / scale), 256)) + (i)*256;
+                let yPhase = Math.floor(screenOffsetY / 176 / scale); 
+                let roomY = Math.floor(euclidMod(Math.floor(screenOffsetY / scale), 176)) + (j)*176;
+
+                let colorPhase = ((xPhase + yPhase + (i + j + 2)) % 2) === 0; 
+                
+                if(colorPhase) {
+                    ctx.fillStyle = "gray"; 
+                } else {
+                    ctx.fillStyle = "black"; 
+                }
+                ctx.fillRect(roomX*scale, roomY*scale, 256*scale, 176*scale);         
+            }
+        }
+        
+        let worldX = mouseX - screenOffsetX;
+        let worldY = mouseY - screenOffsetY;
+
+        // let hoverXY = getRoomXY(worldX, worldY); 
+        // if(rooms.has(hoverXY[0], hoverXY[1])) {
+            
+        // } 
+        
+        let rm = findRoomPlacement(worldX, worldY);  
+        if(rm != null) {
+            virtualRooms.set(rm[0].x, rm[0].y, rm[0]); 
+            rm[0].draw(ctx, 'rgba(255, 255, 0, 0.5)');
+            ctx.globalAlpha = 1.0; 
+        }
+
+
+        
+        // if(keysPressed[" "]) {
+        //     ctx.globalAlpha = 0.5; 
+        //     ctx.imageSmoothingEnabled = false;
+        //     ctx.drawImage(roomImage, euclidSnap(screenOffsetX, scale) + roomGlobalX*scale, euclidSnap(screenOffsetY, scale) + roomGlobalY*scale, 256 * scale, 176 * scale);
+        //     ctx.globalAlpha = 1.0; 
+        // }
+
+        for (const [key, room] of rooms.map) {
+          ctx.globalAlpha = 1.0; 
+          ctx.imageSmoothingEnabled = false;
+          if(!virtualRooms.has(room.x, room.y)) {
+            room.draw(ctx, null);
+          }
+          if(room.getCenterHovered(worldX, worldY) && (room.x != 0 || room.y != 0)) {
+              ctx.fillStyle = 'rgba(0, 255, 0, 0.5)';
+              ctx.fillRect((room.x*256 + 32)*scale + euclidSnap(screenOffsetX, scale), (room.y*176 + 32)*scale + euclidSnap(screenOffsetY, scale), 192*scale, 112*scale); 
+              ctx.fillStyle = 'white';
+              
+              room.drawItems(ctx,  room.hasKey, true);
+          } else {
+              room.drawItems(ctx, false, room.hasKey);
+          }
+        }
+        // let worldX = mouseX - screenOffsetX;
+        // let worldY = mouseY - screenOffsetY;
+        // let tileX = euclidSnap(Math.floor(worldX / scale), 16);
+        // let tileY = euclidSnap(Math.floor(worldY / scale), 16);
+        
+
+        // if(!dragging) {
+        //     ctx.fillStyle = "white";
+        //     ctx.fillRect(tileX*scale + euclidSnap(screenOffsetX, scale), tileY*scale + euclidSnap(screenOffsetY, scale), 16*scale, 16*scale); 
+        // } else {
+        //     ctx.fillStyle = "white";
+        //     let minTileX = Math.min(tileX, tileDragX); 
+        //     let minTileY = Math.min(tileY, tileDragY); 
+            
+        //     let width = Math.abs(tileX - tileDragX) + 16; 
+        //     let height = Math.abs(tileY - tileDragY) + 16;
+        //     ctx.fillRect(minTileX*scale + euclidSnap(screenOffsetX, scale), minTileY*scale + euclidSnap(screenOffsetY, scale), width*scale, height*scale); 
+        // }
+        
+        // If not dragging and holding one of the keys (s,k,e), show preview of a new node.
+        if (!dragging && (keysPressed["s"] || keysPressed["k"] || keysPressed["e"])) {
+
+        }
+
+        // If dragging, draw an edge from the starting node to the current mouse position.
+        if (dragging && draggingNode !== -1) {
+
+        }
+
+
+ 
+        requestAnimationFrame(gameLoop);
+      }
+      requestAnimationFrame(gameLoop);
+    </script>
+  </body>
+</html>
