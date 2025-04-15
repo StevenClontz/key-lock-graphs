@@ -299,8 +299,14 @@
         ctx.stroke();
       }
 
-      function saveGraph() {
-        const fileText = exportGraph();
+
+      function exportMap() {
+        let s = JSON.stringify(Object.fromEntries(rooms.map)); 
+        return s; 
+      }
+
+      function saveMap() {
+        const fileText = exportMap();
         const blob = new Blob([fileText], { type: "text/plain" });
         const url = URL.createObjectURL(blob);
         const downloadLink = document.getElementById("downloadLink");
@@ -311,7 +317,7 @@
         console.log("Exported Graph!");
       }
 
-      function loadGraph() {
+      function loadMap() {
         document.getElementById("fileInput").click();
       }
       
@@ -323,8 +329,13 @@
         }
         const reader = new FileReader();
         reader.onload = function(e) {
-          importGraph(e.target.result);
-          console.log("Imported Graph!");
+            roomsMap = JSON.parse(e.target.result);
+            let actualRooms = new Map(); 
+            for(const key in roomsMap) {
+                actualRooms.set(key, Object.assign(new Room(0, 0), roomsMap[key]));
+            }
+
+            rooms.map = actualRooms; 
         };
         reader.readAsText(file);
       });
@@ -420,6 +431,13 @@
                 } 
             }
         } 
+
+        if(e.key == "[") {
+            saveMap(); 
+        }
+        if(e.key == "]") {
+            loadMap(); 
+        }
 
         if (e.key === "1" || e.key === "2" || e.key === "3" || e.key === "4" || e.key === "5" || e.key === "6") {
             selectedEdge = parseInt(e.key) - 1; 
