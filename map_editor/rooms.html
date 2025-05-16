@@ -23,32 +23,32 @@
       const ctx = canvas.getContext("2d");
 
       const roomImage = new Image();
-      roomImage.src = './assets/empty_room.png';
+      roomImage.src = './images/empty_room.png';
 
       const startTiles = new Image();
-      startTiles.src = "./assets/start_tiles.png";
+      startTiles.src = "./images/start_tiles.png";
 
       const bricks = new Image();
-      bricks.src = "./assets/brick.png";
+      bricks.src = "./images/brick.png";
 
       const keyImage = new Image();
-      keyImage.src = "./assets/items/key.png";
+      keyImage.src = "./images/items/key.png";
 
       const redKeyImage = new Image();
-      redKeyImage.src = "./assets/items/key_red.png";
+      redKeyImage.src = "./images/items/key_red.png";
 
       const closedEdge = new Image();
-      closedEdge.src = "./assets/edges/closed_edge.png";
+      closedEdge.src = "./images/edges/closed_edge.png";
       const lockedEdge = new Image();
-      lockedEdge.src = "./assets/edges/locked_edge.png";
+      lockedEdge.src = "./images/edges/locked_edge.png";
       const openEdge = new Image();
-      openEdge.src = "./assets/edges/open_edge.png";
+      openEdge.src = "./images/edges/open_edge.png";
       const itemEdge = new Image();
-      itemEdge.src = "./assets/edges/item_edge.png";
+      itemEdge.src = "./images/edges/item_edge.png";
       const bowEdge = new Image();
-      bowEdge.src = "./assets/edges/bow_edge.png";
+      bowEdge.src = "./images/edges/bow_edge.png";
       const bombEdge = new Image();
-      bombEdge.src = "./assets/edges/bomb_edge.png";
+      bombEdge.src = "./images/edges/bomb_edge.png";
       
       let sideImages = [
           closedEdge, lockedEdge, openEdge, itemEdge, bowEdge, bombEdge
@@ -61,6 +61,7 @@
       const openEdgeID = 2; 
       const itemEdgeID = 3; 
       const bowEdgeID = 4; 
+      const bombEdgeID = 5; 
 
       const topID = 0; 
       const bottomID = 1; 
@@ -74,6 +75,83 @@
       let tileDragX;
       let tileDragY; 
 
+      class Graph {
+         constructor(startingVertexID, keyEdges, keyCounts) {
+            this.start = startingVertexID;
+            this.keyEdges = keyEdges; // (vertex1, vertex2)
+            this.keyCounts = keyCounts; // Number of keys on a vertex
+         }
+
+         //
+         // KNOWN ISSUE. If the graph contains cyclic external trees,
+         // It fails due to the assumption of only one tree. 
+         //
+         isTunnelGraph() {
+            if(this.keyEdges.length == 0) {
+                return true; 
+            }
+            
+            let vertexEdges = []
+            for(let i = 0; i < this.keyCounts.length; i++) {
+                vertexEdges.push([]);
+            }
+
+            for(let i = 0; i < this.keyEdges.length; i++) {
+                let a = this.keyEdges[i][0];
+                let b = this.keyEdges[i][1];
+
+                vertexEdges[a].push(b);
+                vertexEdges[b].push(a);
+            }
+
+            let numberOfFloaters = 0; // Vertex with no connections
+            let numberOfLeafs = 0; // Vertex with one connections
+            let numberOfStems = 0; // Vertex with two connections
+            let numberOfCores = 0; // Vertex with more than two connections
+            for(let i = 0; i < vertexEdges.length; i++) {
+                if(vertexEdges[i].length == 0) numberOfFloaters += 1;
+                else if(vertexEdges[i].length == 1) numberOfLeafs += 1;
+                else if(vertexEdges[i].length == 2) numberOfStems += 1;
+                else if(vertexEdges[i].length > 2) numberOfCores += 1; 
+            }
+
+            console.log(numberOfFloaters + " " + numberOfLeafs + " " + numberOfStems + " " + numberOfCores);
+            if(numberOfLeafs == 2) {
+                if(numberOfCores == 0) {
+                    if(numberOfFloaters == 0) {
+                        // Start vetex must be a leaf 
+                        if(vertexEdges[this.start].length == 1) {
+                            console.log("Tunnel Structure");
+
+                            // Well keyed condition 
+                            let currentVertex = this.start;
+                            let pastVertex = -1; 
+                            let totalKeys = 0;
+                            for(let i = 0; i < this.keyEdges.length; i++) {
+                                totalKeys += this.keyCounts[currentVertex];
+     
+                                if(totalKeys > 0) {
+                                    totalKeys -= 1; 
+                                    let nextVertex = vertexEdges[currentVertex][0] != pastVertex ? 
+                                            vertexEdges[currentVertex][0] : vertexEdges[currentVertex][1];
+                                    pastVertex = currentVertex; 
+                                    currentVertex = nextVertex;
+                                } else {
+                                    console.log("Not enough keys!"); 
+                                    return false; 
+                                }
+                            }
+                            return true;             
+                            
+                        }
+                    }
+                }
+            }
+
+            return false; 
+         }
+      }
+ 
       class CoordinateMap {
           constructor() {
               this.map = new Map();
@@ -118,6 +196,8 @@
               this.isEntrance = false; 
 
               this.hasKey = false; 
+              this.flooded = false; 
+              this.vertID = 0; 
           }
           
           drawItems(context, isHover, hasKey) {
@@ -131,6 +211,8 @@
           }
 
           draw(context, color) {
+              if(scale < 1.5)
+              ctx.imageSmoothingEnabled = true;
               if(!rooms.has(this.x, this.y - 1)) {
                 this.verticalSide = closedEdgeID; 
               }
@@ -186,6 +268,7 @@
                   context.fillRect(gx, gy, 256*scale, 176*scale);
               }
               context.fillStyle = 'rgba(255, 255, 255, 1.0)';
+              ctx.imageSmoothingEnabled = false;
           }
           
           getHoverSide(checkX, checkY) {
@@ -299,7 +382,6 @@
         ctx.stroke();
       }
 
-
       function exportMap() {
         let s = JSON.stringify(Object.fromEntries(rooms.map)); 
         return s; 
@@ -336,6 +418,7 @@
             }
 
             rooms.map = actualRooms; 
+            console.log(actualRooms);  
         };
         reader.readAsText(file);
       });
@@ -438,6 +521,22 @@
         if(e.key == "]") {
             loadMap(); 
         }
+        if(e.key == "g") {
+            let g = generateGraph(false);  
+            console.log(g.isTunnelGraph());
+        }
+        if(e.key == "d") {
+            let worldX = mouseX - screenOffsetX;
+            let worldY = mouseY - screenOffsetY;
+
+            let xy = getRoomXY(worldX, worldY);
+            if(rooms.has(xy[0], xy[1]) && (xy[0] != 0 || xy[1] != 0)) {
+                let room = rooms.get(xy[0], xy[1])
+                if(room.getCenterHovered(worldX, worldY)) {  
+                    console.log(room.vertID); 
+                } 
+            }
+        }
 
         if (e.key === "1" || e.key === "2" || e.key === "3" || e.key === "4" || e.key === "5" || e.key === "6") {
             selectedEdge = parseInt(e.key) - 1; 
@@ -475,6 +574,96 @@
           screenOffsetX -= speed * deltaTime;
         }
       }
+
+      function generateGraph(floodBombWalls) {
+            // Reset graph IDs
+            for(const [key, room] of rooms.map) {
+                room.flooded = false; 
+                room.vertID = 0; 
+            }  
+
+            // Find all independent nodes. 
+            vertexID = 0; 
+            startingVertexID = 0; 
+            keyCounts = []
+            for(const [key, room] of rooms.map) {
+                if(!room.flooded) {
+                    keyCounts.push(floodFill(floodBombWalls, vertexID, room.x, room.y));
+                    vertexID += 1; 
+                }
+                if(room.isEntrance) startingVertexID = room.vertID; 
+            }
+
+            keyEdges = []
+            numberOfVertices = vertexID; 
+            
+            
+            // Find all edges between nodes
+            for(const [key, room] of rooms.map) {
+                let selectedRoom = room;
+                let x = room.x;
+                let y = room.y;
+                // top 
+                if(rooms.has(x, y - 1)) {
+                    let r = rooms.get(x, y - 1);
+                    if (selectedRoom.verticalSide == lockedEdgeID) {
+                        let smallest = Math.min(r.vertID, room.vertID); 
+                        let largest  = Math.max(r.vertID, room.vertID); 
+                        keyEdges.push([smallest,  largest]);
+                    }
+                }
+                // right
+                if(rooms.has(x + 1, y)) {
+                    let r = rooms.get(x + 1, y);
+                    if (selectedRoom.horizontalSide == lockedEdgeID) {
+                        let smallest = Math.min(r.vertID, room.vertID); 
+                        let largest  = Math.max(r.vertID, room.vertID); 
+                        keyEdges.push([smallest,  largest]);
+                    }
+                }
+            }  
+            console.log(startingVertexID); 
+            console.log(keyEdges); 
+            console.log(keyCounts); 
+
+            return new Graph(startingVertexID, keyEdges, keyCounts);
+            
+      }
+
+      function floodFill(floodBombWalls, vertexID, x, y) {
+            let selectedRoom = rooms.get(x, y); 
+            selectedRoom.flooded = true; 
+            selectedRoom.vertID = vertexID; 
+
+            keyCount = 0; 
+            // top 
+            if(rooms.has(x, y - 1) && !rooms.get(x, y - 1).flooded) {
+                if ((selectedRoom.verticalSide == openEdgeID) || (floodBombWalls && selectedRoom.verticalSide == bombEdgeID)) {
+                    keyCount += floodFill(floodBombWalls, vertexID, x, y - 1);       
+                }
+            }
+            // bottom
+            if(rooms.has(x, y + 1) && !rooms.get(x, y + 1).flooded) {
+                if ((rooms.get(x, y + 1).verticalSide == openEdgeID) || (floodBombWalls && rooms.get(x, y + 1).verticalSide == bombEdgeID)) {
+                    keyCount += floodFill(floodBombWalls, vertexID, x, y + 1);       
+                }
+            }
+            // right 
+            if(rooms.has(x + 1, y) && !rooms.get(x + 1, y).flooded) {
+                if ((selectedRoom.horizontalSide == openEdgeID) || (floodBombWalls && selectedRoom.horizontalSide == bombEdgeID)) {
+                    keyCount += floodFill(floodBombWalls, vertexID, x + 1, y);       
+                }
+            }
+            // left
+            if(rooms.has(x - 1, y) && !rooms.get(x - 1, y).flooded) {
+                if ((rooms.get(x - 1, y).horizontalSide == openEdgeID) || (floodBombWalls && rooms.get(x - 1, y).horizontalSide == bombEdgeID)) {
+                    keyCount += floodFill(floodBombWalls, vertexID, x - 1, y);       
+                }
+            }
+            return keyCount + (selectedRoom.hasKey?1:0);
+      }
+
+
 
       // === Game Loop ===
 
