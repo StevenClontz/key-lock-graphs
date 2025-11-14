@@ -382,13 +382,8 @@
         ctx.stroke();
       }
 
-      function exportMap() {
-        let s = JSON.stringify(Object.fromEntries(rooms.map)); 
-        return s; 
-      }
-
-      function saveMap() {
-        const fileText = exportMap();
+      function saveGraph() {
+        const fileText = exportGraph();
         const blob = new Blob([fileText], { type: "text/plain" });
         const url = URL.createObjectURL(blob);
         const downloadLink = document.getElementById("downloadLink");
@@ -399,7 +394,7 @@
         console.log("Exported Graph!");
       }
 
-      function loadMap() {
+      function loadGraph() {
         document.getElementById("fileInput").click();
       }
       
@@ -411,14 +406,8 @@
         }
         const reader = new FileReader();
         reader.onload = function(e) {
-            roomsMap = JSON.parse(e.target.result);
-            let actualRooms = new Map(); 
-            for(const key in roomsMap) {
-                actualRooms.set(key, Object.assign(new Room(0, 0), roomsMap[key]));
-            }
-
-            rooms.map = actualRooms; 
-            console.log(actualRooms);  
+          importGraph(e.target.result);
+          console.log("Imported Graph!");
         };
         reader.readAsText(file);
       });
@@ -514,29 +503,6 @@
                 } 
             }
         } 
-
-        if(e.key == "[") {
-            saveMap(); 
-        }
-        if(e.key == "]") {
-            loadMap(); 
-        }
-        if(e.key == "g") {
-            let g = generateGraph(false);  
-            console.log(g.isTunnelGraph());
-        }
-        if(e.key == "d") {
-            let worldX = mouseX - screenOffsetX;
-            let worldY = mouseY - screenOffsetY;
-
-            let xy = getRoomXY(worldX, worldY);
-            if(rooms.has(xy[0], xy[1]) && (xy[0] != 0 || xy[1] != 0)) {
-                let room = rooms.get(xy[0], xy[1])
-                if(room.getCenterHovered(worldX, worldY)) {  
-                    console.log(room.vertID); 
-                } 
-            }
-        }
 
         if (e.key === "1" || e.key === "2" || e.key === "3" || e.key === "4" || e.key === "5" || e.key === "6") {
             selectedEdge = parseInt(e.key) - 1; 
